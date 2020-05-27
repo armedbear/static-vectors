@@ -22,17 +22,27 @@
 
 (declaim (inline %allocate-static-vector))
 (defun %allocate-static-vector (length element-type)
-  (flet ((size-of (element-type)
-           ;; assume 8-bit bytes
-           1))
+  (let* ((type
+          (first element-type))
+         (bits-per-byte
+           (second element-type))
+         (bytes-per-element  ;; ehh, not going to work well for element type not of size 8, 16, or 32
+           (ceiling bits-per-byte 8)))
+    (unless (subtypep element-type
+                      '(or (unsigned-byte 8) (unsigned-byte 16) (unsigned-byte 32)))
+      (signal 'type-error :datum element-type
+                          :expected-type '(or
+                                           (unsigned-byte 8)
+                                           (unsigned-byte 16)
+                                           (unsigned-byte 32))))
     (let* ((bytes
-             (* length (size-of element-type)))
+             (* length bytes-per-element))
            (heap-pointer
              (jss:new "com.sun.jna.Memory" bytes))
            (bytebuffer
              (#"getByteBuffer" heap-pointer 0 bytes))
            (static-vector
-             (ext:make-bytebuffer-byte-vector bytebuffer)))
+             (ext:make-niobuffer-vector bytebuffer :element-type element-type)))
       (setf (gethash static-vector *static-vector-pointer*)
             heap-pointer)
       (values
